@@ -22,6 +22,8 @@ import com.unciv.models.ruleset.unique.GameContext
 import com.unciv.utils.debug
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.isActive
+import yairm210.purity.annotations.Pure
+import yairm210.purity.annotations.Readonly
 import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.pow
@@ -526,6 +528,7 @@ class MapGenerator(val ruleset: Ruleset, private val coroutineScope: CoroutineSc
      * Adjust the location of the map edges (poles), squishing towards or pulling away from equator.
      * >0 means snow/tundra will be closer to equator.
      */
+    @Readonly
     private fun getPolarShift(mapShape: String, mapType: String): Double = when {
         mapType == MapType.pangaea -> 0.15
         mapType == MapType.fractal || mapType == MapType.smallContinents -> 0.05
@@ -533,6 +536,7 @@ class MapGenerator(val ruleset: Ruleset, private val coroutineScope: CoroutineSc
         else -> 0.0
     }
 
+    @Readonly
     private fun getTileRadius(tile: Tile, tileMap: TileMap): Float {
         val latitudeRatio = abs(tile.latitude) / tileMap.maxLatitude
         val longitudeRatio = abs(tile.longitude) / tileMap.maxLongitude
@@ -586,6 +590,7 @@ class MapGenerator(val ruleset: Ruleset, private val coroutineScope: CoroutineSc
      * @returns value in new scale
      * special thanks to @letstalkaboutdune for the math
      */
+    @Pure
     private fun scaleToRange(x1: Double, x2: Double, y1: Double, y2: Double, value: Float): Double {
         val gain = (y2 - y1) / (x2 - x1)
         val offset = y2 - (gain * x2)
