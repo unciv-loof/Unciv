@@ -23,6 +23,7 @@ import com.unciv.utils.debug
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.isActive
 import kotlin.math.abs
+import kotlin.math.max
 import kotlin.math.pow
 import kotlin.math.roundToInt
 import kotlin.math.sign
@@ -122,7 +123,7 @@ class MapGenerator(val ruleset: Ruleset, private val coroutineScope: CoroutineSc
             MapElevationGenerator(map, ruleset, randomness).raiseMountainsAndHills()
         }
         runAndMeasure("applyHumidityAndTemperature") {
-            applyHumidityAndTemperature(map)
+            applyHumidityAndTemperature(map, mapParameters.shape, mapParameters.type)
         }
         runAndMeasure("spawnLakesAndCoasts") {
             spawnLakesAndCoasts(map)
@@ -233,7 +234,7 @@ class MapGenerator(val ruleset: Ruleset, private val coroutineScope: CoroutineSc
                 MapGeneratorSteps.All -> throw IllegalArgumentException("MapGeneratorSteps.All cannot be used in generateSingleStep")
                 MapGeneratorSteps.Landmass -> MapLandmassGenerator(map, ruleset, randomness).generateLand()
                 MapGeneratorSteps.Elevation -> MapElevationGenerator(map, ruleset, randomness).raiseMountainsAndHills()
-                MapGeneratorSteps.HumidityAndTemperature -> applyHumidityAndTemperature(map)
+                MapGeneratorSteps.HumidityAndTemperature -> applyHumidityAndTemperature(map, map.mapParameters.shape, map.mapParameters.type)
                 MapGeneratorSteps.LakesAndCoast -> spawnLakesAndCoasts(map)
                 MapGeneratorSteps.Vegetation -> spawnVegetation(map)
                 MapGeneratorSteps.RareFeatures -> spawnRareFeatures(map)
@@ -434,7 +435,11 @@ class MapGenerator(val ruleset: Ruleset, private val coroutineScope: CoroutineSc
      * [MapParameters.temperatureintensity] to favor very high and very low temperatures
      * [MapParameters.temperatureShift] to shift temperature towards cold (negative) or hot (positive)
      */
-    private fun applyHumidityAndTemperature(tileMap: TileMap) {
+    private fun applyHumidityAndTemperature(
+        tileMap: TileMap,
+        mapShape: String,
+        mapType: String
+    ) {
         val humiditySeed = randomness.RNG.nextInt().toDouble()
         val temperatureSeed = randomness.RNG.nextInt().toDouble()
 
@@ -443,7 +448,6 @@ class MapGenerator(val ruleset: Ruleset, private val coroutineScope: CoroutineSc
         val scale = tileMap.mapParameters.tilesPerBiomeArea.toDouble()
         val temperatureintensity = tileMap.mapParameters.temperatureintensity
         val temperatureShift = tileMap.mapParameters.temperatureShift
-        val humidityShift = if (temperatureShift > 0) -temperatureShift / 2 else 0f
 
         // List is OK here as it's only sequentially scanned
         val limitsMap: List<TerrainOccursRange> =
@@ -456,28 +460,37 @@ class MapGenerator(val ruleset: Ruleset, private val coroutineScope: CoroutineSc
             }.mapTo(mutableSetOf()) { it.name }
         if (elevationTerrains.isEmpty())
             elevationTerrains.add(Constants.mountain)
+        
+        val polarShift: Double = getPolarShift(mapShape, mapType)
 
         for (tile in tileMap.values.asSequence()) {
             if (tile.isWater || tile.baseTerrain in elevationTerrains)
                 continue
 
             val humidityRandom = randomness.getPerlinNoise(tile, humiditySeed, scale = scale, nOctaves = 1)
-            val humidity = ((humidityRandom + 1.0) / 2.0 + humidityShift).coerceIn(0.0..1.0)
+            val humidity = ((humidityRandom + 1.0) / 2.0).coerceIn(0.0..1.0)
 
             val expectedTemperature = if (tileMap.mapParameters.shape == MapShape.flatEarth) {
                 // Flat Earth uses radius because North is center of map
-                val radius = getTileRadius(tile, tileMap)
+                val radius = 1 - getTileRadius(tile, tileMap)
+                /*
+                in a circle, the center (0.0<r<0.1) has a much smaller area than the outer edge (0.9<r<1.0)
+                consider adjusting the radius such that the area of each polar region is approximately the same
+                this means more snow in the center and less near the edges
+                 */
+                // val areaAdjustedRadius = radius * radius
                 val radiusTemperature = getTemperatureAtRadius(radius)
                 radiusTemperature
             } else {
                 // Globe Earth uses latitude because North is top of map
-                val latitudeTemperature = 1.0 - 2.0 * abs(tile.latitude) / tileMap.maxLatitude
-                latitudeTemperature
+                val latFromEquator = abs(tile.latitude) / tileMap.maxLatitude
+                val latitudeTemperature = 1.0 - 2.0 * latFromEquator / (1 - polarShift)
+                latitudeTemperature//.coerceIn(-1.0..1.0)
             }
 
             val randomTemperature = randomness.getPerlinNoise(tile, temperatureSeed, scale = scale, nOctaves = 1)
             var temperature = (5.0 * expectedTemperature + randomTemperature) / 6.0
-            temperature = abs(temperature).pow(1.0 - temperatureintensity) * temperature.sign
+            temperature = abs(temperature).pow(1.0 - 4 * (temperatureintensity - 0.6)) * temperature.sign
             temperature = (temperature + temperatureShift).coerceIn(-1.0..1.0)
 
             // Old, static map generation rules - necessary for existing base ruleset mods to continue to function
@@ -507,6 +520,17 @@ class MapGenerator(val ruleset: Ruleset, private val coroutineScope: CoroutineSc
             tile.temperature = temperature
             tile.setTerrainTransients()
         }
+    }
+
+    /**
+     * Adjusts the size of the poles.
+     * Useful to increase on maps where the poles would otherwise be in a water region, or decrease on rectangular maps where there is too much snow
+     */
+    private fun getPolarShift(mapShape: String, mapType: String): Double = when {
+        mapType == MapType.pangaea -> 0.15
+        mapType == MapType.fractal || mapType == MapType.smallContinents -> 0.05
+        mapShape == MapShape.rectangular -> -0.10
+        else -> 0.0
     }
 
     private fun getTileRadius(tile: Tile, tileMap: TileMap): Float {
