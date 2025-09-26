@@ -523,8 +523,8 @@ class MapGenerator(val ruleset: Ruleset, private val coroutineScope: CoroutineSc
     }
 
     /**
-     * Adjusts the size of the poles.
-     * Useful to increase on maps where the poles would otherwise be in a water region, or decrease on rectangular maps where there is too much snow
+     * Adjust the location of the map edges (poles), squishing towards or pulling away from equator.
+     * >0 means snow/tundra will be closer to equator.
      */
     private fun getPolarShift(mapShape: String, mapType: String): Double = when {
         mapType == MapType.pangaea -> 0.15
