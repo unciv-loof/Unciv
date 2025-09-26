@@ -530,8 +530,10 @@ class MapGenerator(val ruleset: Ruleset, private val coroutineScope: CoroutineSc
      */
     @Readonly
     private fun getPolarShift(mapShape: String, mapType: String): Double = when {
+        // more snow on island maps - they rarely have landmass near the poles
         mapType == MapType.pangaea -> 0.15
         mapType == MapType.fractal || mapType == MapType.smallContinents -> 0.05
+        // less snow on rectangular maps - they are prone to have a lot
         mapShape == MapShape.rectangular -> -0.10
         else -> 0.0
     }
