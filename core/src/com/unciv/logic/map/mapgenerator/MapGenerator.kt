@@ -474,7 +474,7 @@ class MapGenerator(val ruleset: Ruleset, private val coroutineScope: CoroutineSc
 
             val expectedTemperature = if (tileMap.mapParameters.shape == MapShape.flatEarth) {
                 // Flat Earth uses radius because North is center of map
-                val radius = 1 - getTileRadius(tile, tileMap)
+                val radius = getTileRadius(tile, tileMap)
                 /*
                 in a circle, the center (0.0<r<0.1) has a much smaller area than the outer edge (0.9<r<1.0)
                 consider adjusting the radius such that the area of each polar region is approximately the same
