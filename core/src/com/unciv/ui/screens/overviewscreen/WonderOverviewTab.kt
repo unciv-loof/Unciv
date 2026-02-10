@@ -125,7 +125,7 @@ class WonderInfo {
         fun getStatusColumn() = when {
             status != WonderStatus.Known -> status.label
             civ == null -> status.label
-            else -> civ.civName
+            else -> civ.civID
         }
 
         fun getLocationColumn() = when {
@@ -134,7 +134,7 @@ class WonderInfo {
             location.isCityCenter() -> location.getCity()!!.name
             location.getCity() != null -> "Near [${location.getCity()!!}]"
             city != null -> "Somewhere around [$city]"
-            viewEntireMapForDebug -> location.position.toString()
+            viewEntireMapForDebug -> location.position.toPrettyString()
             else -> "Far away"
         }
 

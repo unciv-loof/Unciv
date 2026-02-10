@@ -84,7 +84,7 @@ class TradeLogic(val ourCivilization: Civilization, val otherCivilization: Civil
             val civsWeKnowAndTheyDont = otherCivsWeKnow
                 .filter { !otherCiv.knows(it) && !it.isDefeated() }
             for (thirdCiv in civsWeKnowAndTheyDont) {
-                offers.add(TradeOffer(thirdCiv.civName, TradeOfferType.Introduction, speed = civInfo.gameInfo.speed))
+                offers.add(TradeOffer(thirdCiv.civID, TradeOfferType.Introduction, speed = civInfo.gameInfo.speed))
             }
         }
 
@@ -94,7 +94,7 @@ class TradeLogic(val ourCivilization: Civilization, val otherCivilization: Civil
             val civsWeArentAtWarWith = civsWeBothKnow
                     .filter { civInfo.getDiplomacyManager(it)!!.canDeclareWar() }
             for (thirdCiv in civsWeArentAtWarWith) {
-                offers.add(TradeOffer(thirdCiv.civName, TradeOfferType.WarDeclaration, speed = civInfo.gameInfo.speed))
+                offers.add(TradeOffer(thirdCiv.civID, TradeOfferType.WarDeclaration, speed = civInfo.gameInfo.speed))
             }
         }
         
@@ -106,7 +106,7 @@ class TradeLogic(val ourCivilization: Civilization, val otherCivilization: Civil
         for (thirdCiv in thirdCivsAtWarTheyKnow) {
             // Setting amount to 0 makes TradeOffer.isTradable() return false and also disables the button in trade window
             val amount = if (TradeEvaluation().isPeaceProposalEnabled(thirdCiv, civInfo)) 1 else 0
-            offers.add(TradeOffer(thirdCiv.civName, TradeOfferType.PeaceProposal, amount, civInfo.gameInfo.speed))
+            offers.add(TradeOffer(thirdCiv.civID, TradeOfferType.PeaceProposal, amount, civInfo.gameInfo.speed))
         }
         
         return offers
@@ -182,9 +182,19 @@ class TradeLogic(val ourCivilization: Civilization, val otherCivilization: Civil
                     val warType = if (currentTrade.theirOffers.any { it.type == TradeOfferType.WarDeclaration && it.name == nameOfCivToDeclareWarOn }
                             && currentTrade.ourOffers.any {it.type == TradeOfferType.WarDeclaration && it.name == nameOfCivToDeclareWarOn})
                         WarType.TeamWar
-                    else WarType.JoinWar
-
-                    from.getDiplomacyManager(nameOfCivToDeclareWarOn)!!.declareWar(DeclareWarReason(warType, to))
+                    else if (currentTrade.theirOffers.any { it.type == TradeOfferType.WarDeclaration && it.name == nameOfCivToDeclareWarOn && ourCivilization.isAtWarWith(to.gameInfo.getCivilization(it.name))}
+                        || currentTrade.ourOffers.any {it.type == TradeOfferType.WarDeclaration && it.name == nameOfCivToDeclareWarOn && otherCivilization.isAtWarWith(to.gameInfo.getCivilization(it.name))})
+                        WarType.JoinWar
+                    else WarType.DirectWar
+                    when(warType) {
+                        WarType.TeamWar, WarType.JoinWar -> from.getDiplomacyManager(nameOfCivToDeclareWarOn)!!.declareWar(DeclareWarReason(warType, to))
+                        WarType.DirectWar -> {
+                            // from will always be the declaring Civ
+                            from.getDiplomacyManager(nameOfCivToDeclareWarOn)!!
+                                .declareWar(DeclareWarReason(warType))
+                        }
+                        else -> {throw IllegalStateException("Unhandled WarType: $warType found within TradeOfferType.WarDeclaration")}
+                    }
                 }
                 TradeOfferType.PeaceProposal -> {
                     // Convert PeaceProposal to peaceTreaty and apply to warring civs

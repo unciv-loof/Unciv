@@ -179,7 +179,9 @@ class MapGenerator(val ruleset: Ruleset, private val coroutineScope: CoroutineSc
     }
     
     private fun flipTopBottom(vector: Vector2): Vector2 = Vector2(-vector.y, -vector.x)
+    private fun flipTopBottom(vector: HexCoord): HexCoord = HexCoord.of(-vector.y, -vector.x)
     private fun flipLeftRight(vector: Vector2): Vector2 = Vector2(vector.y, vector.x)
+    private fun flipLeftRight(vector: HexCoord): HexCoord = HexCoord.of(vector.y, vector.x)
 
     private fun mirror(map: TileMap) {
         fun getMirrorTile(tile: Tile, mirroringType: String): Tile? {
@@ -205,7 +207,7 @@ class MapGenerator(val ruleset: Ruleset, private val coroutineScope: CoroutineSc
             tile.setBaseTerrain(mirrorTile.getBaseTerrain())
             tile.naturalWonder = mirrorTile.naturalWonder
             tile.setTerrainFeatures(mirrorTile.terrainFeatures)
-            tile.resource = mirrorTile.resource
+            tile.tileResource = mirrorTile.tileResource
             tile.improvement = mirrorTile.improvement
             
             for (neighbor in tile.neighbors){
@@ -372,7 +374,7 @@ class MapGenerator(val ruleset: Ruleset, private val coroutineScope: CoroutineSc
     private fun spreadResources(tileMap: TileMap) {
         val mapRadius = tileMap.mapParameters.mapSize.radius
         for (tile in tileMap.values)
-            tile.resource = null
+            tile.tileResource = null
 
         spreadStrategicResources(tileMap, mapRadius)
         spreadResources(tileMap, mapRadius, ResourceType.Luxury)
@@ -511,8 +513,9 @@ class MapGenerator(val ruleset: Ruleset, private val coroutineScope: CoroutineSc
     }
 
     private fun getTileRadius(tile: Tile, tileMap: TileMap): Float {
-        val latitudeRatio = abs(tile.latitude) / tileMap.maxLatitude
-        val longitudeRatio = abs(tile.longitude) / tileMap.maxLongitude
+        // Numbers betwee 0.0-1.0
+        val latitudeRatio = abs(tile.latitude) / tileMap.maxLatitude.toFloat()
+        val longitudeRatio = abs(tile.longitude) / tileMap.maxLongitude.toFloat()
         return sqrt(latitudeRatio.pow(2) + longitudeRatio.pow(2))
     }
 
@@ -727,7 +730,7 @@ class MapGenerator(val ruleset: Ruleset, private val coroutineScope: CoroutineSc
 
         // Flat Earth needs a 1 tile wide perimeter of ice/mountain/snow and a 2 radius cluster of ice in the center.
         for (tile in tileMap.values) {
-            val isCenterTile = tile.latitude == 0f && tile.longitude == 0f
+            val isCenterTile = tile.latitude == 0 && tile.longitude == 0
             val isEdgeTile = tile.neighbors.count() < 6
 
             // Make center tiles ice or snow or mountain depending on availability

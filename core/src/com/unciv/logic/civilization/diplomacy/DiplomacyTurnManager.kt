@@ -50,9 +50,9 @@ object DiplomacyTurnManager {
                         remakePeaceTreaty(trade.theirOffers.first { it.name == Constants.peaceTreaty }.duration)
                     }
 
-                    civInfo.addNotification("One of our trades with [$otherCivName] has been cut short",
+                    civInfo.addNotification("One of our trades with [${otherCiv.civName}] has been cut short",
                         DiplomacyAction(otherCiv, true),
-                        NotificationCategory.Trade, NotificationIcon.Trade, otherCivName)
+                        NotificationCategory.Trade, NotificationIcon.Trade, otherCiv.civName)
                     otherCiv.addNotification("One of our trades with [${civInfo.civName}] has been cut short",
                         DiplomacyAction(civInfo, true),
                         NotificationCategory.Trade, NotificationIcon.Trade, civInfo.civName)
@@ -242,9 +242,9 @@ object DiplomacyTurnManager {
                 trades.remove(trade)
                 for (offer in trade.ourOffers.union(trade.theirOffers).filter { it.duration == 0 }) { // this was a timed trade
                     val direction = if (offer in trade.theirOffers) "from" else "to"
-                    civInfo.addNotification("[${offer.name}] $direction [$otherCivName] has ended",
+                    civInfo.addNotification("[${offer.name}] $direction [${otherCiv.civName}] has ended",
                         DiplomacyAction(otherCiv, true),
-                        NotificationCategory.Trade, otherCivName, NotificationIcon.Trade)
+                        NotificationCategory.Trade, otherCiv.civName, NotificationIcon.Trade)
 
                     civInfo.updateStatsForNextTurn() // if they were bringing us gold per turn
                     if (trade.theirOffers.union(trade.ourOffers) // if resources were involved
@@ -256,28 +256,27 @@ object DiplomacyTurnManager {
             for (offer in trade.theirOffers.filter { it.duration <= 3 })
             {
                 if (offer.duration == 3)
-                    civInfo.addNotification("[${offer.name}] from [$otherCivName] will end in [3] turns",
+                    civInfo.addNotification("[${offer.name}] from [${otherCiv.civName}] will end in [3] turns",
                         DiplomacyAction(otherCiv, true),
-                        NotificationCategory.Trade, otherCivName, NotificationIcon.Trade)
+                        NotificationCategory.Trade, otherCiv.civName, NotificationIcon.Trade)
                 else if (offer.duration == 1)
-                    civInfo.addNotification("[${offer.name}] from [$otherCivName] will end next turn",
+                    civInfo.addNotification("[${offer.name}] from [${otherCiv.civName}] will end next turn",
                         DiplomacyAction(otherCiv, true),
-                        NotificationCategory.Trade, otherCivName, NotificationIcon.Trade)
+                        NotificationCategory.Trade, otherCiv.civName, NotificationIcon.Trade)
             }
         }
     }
 
     private fun DiplomacyManager.nextTurnDiplomaticModifiers() {
-        if (diplomaticStatus == DiplomaticStatus.Peace) {
-            if (getModifier(DiplomaticModifiers.YearsOfPeace) < 30)
-                addModifier(DiplomaticModifiers.YearsOfPeace, 0.5f)
-        } else revertToZero(DiplomaticModifiers.YearsOfPeace, 0.5f) // war makes you forget the good ol' days
+        if (diplomaticStatus == DiplomaticStatus.Peace)
+            accumulateToAtMost(DiplomaticModifiers.YearsOfPeace, 0.5f, 30f)
+        else
+            revertToZero(DiplomaticModifiers.YearsOfPeace, 0.5f) // war makes you forget the good ol' days
 
         var openBorders = 0
         if (hasOpenBorders) openBorders += 1
-
         if (otherCivDiplomacy().hasOpenBorders) openBorders += 1
-        if (openBorders > 0) addModifier(DiplomaticModifiers.OpenBorders, openBorders / 8f) // so if we both have open borders it'll grow by 0.25 per turn
+        if (openBorders > 0) accumulateToAtMost(DiplomaticModifiers.OpenBorders, openBorders / 8f) // so if we both have open borders it'll grow by 0.25 per turn
         else revertToZero(DiplomaticModifiers.OpenBorders, 1 / 8f)
 
         // Negatives
@@ -287,6 +286,9 @@ object DiplomacyTurnManager {
         revertToZero(DiplomaticModifiers.BetrayedDeclarationOfFriendship, 1 / 8f) // That's a bastardly thing to do
         revertToZero(DiplomaticModifiers.BetrayedDefensivePact, 1 / 16f) // That's an outrageous thing to do
         revertToZero(DiplomaticModifiers.RefusedToNotSettleCitiesNearUs, 1 / 4f)
+        revertToZero(DiplomaticModifiers.BulliedProtectedMinor, 1 / 2f) // Decays at same rate as warmongering
+        revertToZero(DiplomaticModifiers.AttackedProtectedMinor, 1 / 2f) // Decays at same rate as warmongering
+        revertToZero(DiplomaticModifiers.DestroyedProtectedMinor, 1 / 4f) // Decays slower, similar to capturing cities
         for (demand in Demand.entries) {
             revertToZero(demand.betrayedPromiseDiplomacyMpodifier, 1 / 8f)
         }
@@ -356,13 +358,33 @@ object DiplomacyTurnManager {
         }
     }
 
+    /**
+     * Uses Quick speed as baseline for turn based adjustment of diplomatic modifiers.
+     * This way, the values set in [nextTurnDiplomaticModifiers] will apply 1:1 to Quick speed, which is the most popular speed.
+     */
+    private const val SPEED_ADJUSTMENT_NORMALIZATION_FACTOR = 0.67f
+
     /** @param amount always positive, so you don't need to think about it */
     private fun DiplomacyManager.revertToZero(modifier: DiplomaticModifiers, amount: Float) {
         if (!hasModifier(modifier)) return
         val currentAmount = getModifier(modifier)
-        if (amount >= currentAmount.absoluteValue) diplomaticModifiers.remove(modifier.name)
-        else if (currentAmount > 0) addModifier(modifier, -amount)
-        else addModifier(modifier, amount)
+        val speedAdjustedAmount = SPEED_ADJUSTMENT_NORMALIZATION_FACTOR * amount / civInfo.gameInfo.speed.modifier
+        if (speedAdjustedAmount >= currentAmount.absoluteValue) diplomaticModifiers.remove(modifier.name)
+        else if (currentAmount > 0) addModifier(modifier, -speedAdjustedAmount)
+        else addModifier(modifier, speedAdjustedAmount)
     }
 
+    /**
+     * @param amount should always be positive
+     * @param maxAmount modifier value will not increase beyond this value
+     */
+    private fun DiplomacyManager.accumulateToAtMost(modifier: DiplomaticModifiers, amount: Float, maxAmount: Float = Float.MAX_VALUE) {
+        val currentAmount = getModifier(modifier)
+        // no effect if >= max
+        if (currentAmount >= maxAmount) return
+        val speedAdjustedAmount = SPEED_ADJUSTMENT_NORMALIZATION_FACTOR * amount / civInfo.gameInfo.speed.modifier
+        // do not increase beyond max
+        if (speedAdjustedAmount >= maxAmount - currentAmount) setModifier(modifier, maxAmount)
+        else addModifier(modifier, speedAdjustedAmount)
+    }
 }

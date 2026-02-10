@@ -6,7 +6,6 @@ import com.unciv.logic.city.CityStats
 import com.unciv.logic.civilization.Civilization
 import com.unciv.logic.map.BFS
 import com.unciv.logic.map.TileMap
-import com.unciv.logic.map.mapunit.MapUnit
 import com.unciv.logic.map.tile.Tile
 import com.unciv.models.ruleset.Building
 import com.unciv.models.ruleset.INonPerpetualConstruction
@@ -89,7 +88,7 @@ object Automation {
                 if (unique.params[1] == "Specialists" && city.matchesFilter(unique.params[2]))
                     yieldStats.happiness -= (unique.params[0].toFloat() / 100f)  // relative val is negative, make positive
             if (yieldStats.science == 3f || yieldStats.science >= 5f )
-                yieldStats.science *= 2f
+                yieldStats.science *= 1.3f
         }
 
         val surplusFood = city.cityStats.currentCityStats[Stat.Food]
@@ -191,30 +190,6 @@ object Automation {
             city.cityConstructions.setCurrentConstruction(chosenUnit.name)
     }
 
-    @Suppress("MemberVisibilityCanBePrivate")
-    @Readonly
-    fun providesUnneededCarryingSlots(baseUnit: BaseUnit, civInfo: Civilization): Boolean {
-        // Simplified, will not work for crazy mods with more than one carrying filter for a unit
-        val carryUnique = baseUnit.getMatchingUniques(UniqueType.CarryAirUnits).first()
-        val carryFilter = carryUnique.params[1]
-
-        @Readonly
-        fun getCarryAmount(mapUnit: MapUnit): Int {
-            val mapUnitCarryUnique =
-                mapUnit.getMatchingUniques(UniqueType.CarryAirUnits).firstOrNull() ?: return 0
-            if (mapUnitCarryUnique.params[1] != carryFilter) return 0 //Carries a different type of unit
-            return mapUnitCarryUnique.params[0].toInt() +
-                    mapUnit.getMatchingUniques(UniqueType.CarryExtraAirUnits)
-                        .filter { it.params[1] == carryFilter }.sumOf { it.params[0].toInt() }
-        }
-
-        val totalCarriableUnits =
-            civInfo.units.getCivUnits().count { it.matchesFilter(carryFilter) }
-        val totalCarryingSlots = civInfo.units.getCivUnits().sumOf { getCarryAmount(it) }
-                
-        return totalCarriableUnits < totalCarryingSlots
-    }
-
     @Readonly
     fun chooseMilitaryUnit(city: City, availableUnits: Sequence<BaseUnit>): BaseUnit? {
         val currentChoice = city.cityConstructions.getCurrentConstruction()
@@ -250,9 +225,12 @@ object Automation {
             .filterNot { removeShips && it.isWaterUnit }
             .filter { allowSpendingResource(city.civ, it) }
             .filterNot {
-                // filter out carrier-type units that can't attack if we don't need them
-                it.hasUnique(UniqueType.CarryAirUnits)
-                        && providesUnneededCarryingSlots(it, city.civ)
+                // units that can't attack may be very strong meatshields, but current AI
+                // has trouble using them properly, and this conveniently filters out aircraft carriers
+                // (they're kinda useless compared to investing in battleships or extended-range bombers,
+                // and are obsoleted at Stealth. Excluding units based on their carrying slots being
+                // not needed filters out nuclear submarines and missile cruisers, which is not correct)
+                it.hasUnique(UniqueType.CannotAttack)
             }
             // Only now do we filter out the constructable units because that's a heavier check
             .filter { it.isBuildable(city.cityConstructions) }
@@ -448,8 +426,8 @@ object Automation {
         var rank = rankStatsValue(stats, civInfo)
         if (tile.improvement == null) rank += 0.5f // improvement potential!
         if (tile.isPillaged()) rank += 0.6f
-        if (tile.hasViewableResource(civInfo)) {
-            val resource = tile.tileResource
+        val resource = tile.tileResource
+        if (civInfo.canSeeResource(resource)) {
             if (resource.resourceType != ResourceType.Bonus) rank += 1f // for usage
             if (tile.improvement == null) rank += 1f // improvement potential - resources give lots when improved!
             if (tile.isPillaged()) rank += 1.1f // even better, repair is faster
@@ -473,8 +451,9 @@ object Automation {
         var score = distance * 100
 
         // Resources are good: less points
-        if (tile.hasViewableResource(city.civ)) {
-            if (tile.tileResource.resourceType != ResourceType.Bonus) score -= 105
+        val resource = tile.tileResource
+        if (city.civ.canSeeResource(resource)) {
+            if (resource.resourceType != ResourceType.Bonus) score -= 105
             else if (distance <= city.getWorkRange()) score -= 104
         } else {
             // Water tiles without resources aren't great unless they're Atolls
@@ -493,10 +472,9 @@ object Automation {
 
         for (adjacentTile in tile.neighbors.filter { it.getOwner() == null }) {
             val adjacentDistance = city.getCenterTile().aerialDistanceTo(adjacentTile)
-            if (adjacentTile.hasViewableResource(city.civ) &&
-                (adjacentDistance < city.getWorkRange() ||
-                    adjacentTile.tileResource.resourceType != ResourceType.Bonus
-                )
+            val adjacentResource = adjacentTile.tileResource
+            if (city.civ.canSeeResource(adjacentResource) &&
+                (adjacentDistance < city.getWorkRange() || adjacentResource.resourceType != ResourceType.Bonus)
             ) score -= 1
             if (adjacentTile.naturalWonder != null) {
                 if (adjacentDistance < city.getWorkRange()) adjacentNaturalWonder = true

@@ -1,4 +1,4 @@
-﻿package com.unciv.logic.automation.unit
+package com.unciv.logic.automation.unit
 
 import com.unciv.logic.automation.Automation
 import com.unciv.logic.automation.unit.CivilianUnitAutomation.tryRunAwayIfNeccessary
@@ -64,11 +64,11 @@ object SpecificUnitAutomation {
             return true
         }
 
-        // try to build a citadel for defensive purposes
-        if (unit.civ.getWorkerAutomation().evaluateFortPlacement(unit.currentTile, true)) {
-            UnitActionsFromUniques.getImprovementConstructionActionsFromGeneralUnique(unit, unit.currentTile).firstOrNull()?.action?.invoke()
-            return true
-        }
+        // keep in mind that citadels can be stolen by other citadels.
+        // you need 1 more general than your opponent, or be able to place it on a totally unreachable tile,
+        // for it to make sense to make the first move as the defender.
+        // so, let's focus only on the stealing part for now (the old defensive citadel placement logic turned out negative in simulation result)
+
         return false
     }
 
@@ -196,11 +196,12 @@ object SpecificUnitAutomation {
         val localUniqueCache = LocalUniqueCache()
         for (city in citiesByStatBoost) {
             val applicableTiles = city.getWorkableTiles().filter {
-                it.isLand && it.resource == null && !it.isCityCenter()
-                        && (unit.currentTile == it || unit.movement.canMoveTo(it))
-                        && it.improvement == null
-                        && it.improvementFunctions.canBuildImprovement(improvement, unit.cache.state)
-                        && Automation.rankTile(it, unit.civ, localUniqueCache) > averageTerrainStatsValue
+                it.isLand && (it.tileResource?.isImprovedBy(improvementName) != false) && !it.isCityCenter()
+                    && (unit.currentTile == it || unit.movement.canMoveTo(it))
+                    // okay if we replace regular improvements by great improvements, but not the other way around
+                    && (it.improvement == null || !it.getTileImprovement()!!.hasUnique(UniqueType.GreatImprovement))
+                    && it.improvementFunctions.canBuildImprovement(improvement, unit.cache.state)
+                    && (!improvement.hasUnique(UniqueType.GreatImprovement) || Automation.rankStatsValue(it.getBaseTerrain().cloneStats(), unit.civ) > averageTerrainStatsValue)
             }
 
             if (applicableTiles.none()) continue

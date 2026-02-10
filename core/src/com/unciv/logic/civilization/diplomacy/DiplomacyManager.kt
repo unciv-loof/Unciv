@@ -102,7 +102,7 @@ enum class DiplomaticModifiers(val text: String) {
     CapturedOurCities("You have captured our cities!"),
     DeclaredFriendshipWithOurEnemies("You have declared friendship with our enemies!"),
     BetrayedDeclarationOfFriendship("Your so-called 'friendship' is worth nothing."),
-    SignedDefensivePactWithOurEnemies("You have declared a defensive pact with our enemies!"),
+    SignedDefensivePactWithOurEnemies("You have signed a defensive pact with our enemy!"),
     BetrayedDefensivePact("Your so-called 'defensive pact' is worth nothing."),
     Denunciation("You have publicly denounced us!"),
     DenouncedOurAllies("You have denounced our allies"),
@@ -134,7 +134,7 @@ enum class DiplomaticModifiers(val text: String) {
     DeclarationOfFriendship("We have signed a public declaration of friendship"),
     DeclaredFriendshipWithOurAllies("You have declared friendship with our allies"),
     DefensivePact("We have signed a promise to protect each other."),
-    SignedDefensivePactWithOurAllies("You have declared a defensive pact with our allies"),
+    SignedDefensivePactWithOurAllies("You have signed a defensive pact with our ally"),
     DenouncedOurEnemies("You have denounced our enemies"),
     OpenBorders("Our open borders have brought us closer together."),
     FulfilledPromiseToNotSettleCitiesNearUs("You fulfilled your promise to stop settling cities near us!"),
@@ -171,12 +171,22 @@ class DiplomacyManager() : IsPartOfGameInfoSerialization {
     @Transient
     lateinit var civInfo: Civilization
 
+    lateinit var otherCivName: String
+        private set
+    @Cache
+    @Transient
+    private lateinit var _otherCiv: Civilization
+    @get:Readonly val otherCiv: Civilization get() {
+        if (!::_otherCiv.isInitialized)
+            _otherCiv = civInfo.gameInfo.getCivilization(otherCivName)
+        return _otherCiv
+    }
+
     // since this needs to be checked a lot during travel, putting it in a transient is a good performance booster
     @Transient
     /** Can civInfo enter otherCivInfo's tiles? */
     var hasOpenBorders = false
 
-    lateinit var otherCivName: String
     var trades = ArrayList<Trade>()
     var diplomaticStatus = DiplomaticStatus.War
 
@@ -249,33 +259,24 @@ class DiplomacyManager() : IsPartOfGameInfoSerialization {
     }
 
     // called when we meet a new civ
-    constructor(civilization: Civilization, mOtherCivName: String) : this() {
+    constructor(civilization: Civilization, otherCivName: String) : this() {
         civInfo = civilization
-        otherCivName = mOtherCivName
+        this.otherCivName = otherCivName
+        updateHasOpenBorders()
         smoothedOpinionOfOtherCiv = 0f
         cachedSmoothedOpinionOfOtherCiv = 0f
-        updateHasOpenBorders()
     }
 
     constructor(civilization: Civilization, otherCiv: Civilization) : this() {
         civInfo = civilization
-        mOtherCiv = otherCiv
-        otherCivName = otherCiv.civName
+        _otherCiv = otherCiv
+        otherCivName = otherCiv.civID
+        updateHasOpenBorders()
         smoothedOpinionOfOtherCiv = 0f
         cachedSmoothedOpinionOfOtherCiv = 0f
-        updateHasOpenBorders()
     }
 
     //region pure functions
-
-    @Cache
-    @Transient
-    private lateinit var mOtherCiv: Civilization
-    @get:Readonly val otherCiv: Civilization get() {
-        if (!::mOtherCiv.isInitialized)
-            mOtherCiv = civInfo.gameInfo.getCivilization(otherCivName)
-        return mOtherCiv
-    }
     @Readonly fun otherCivDiplomacy() = otherCiv.getDiplomacyManager(civInfo)!!
 
     @Readonly
@@ -611,8 +612,8 @@ class DiplomacyManager() : IsPartOfGameInfoSerialization {
 
         for (civ in getCommonKnownCivsWithSpectators()) {
             civ.addNotification(
-                    "[${civInfo.civName}] and [$otherCivName] have signed a Peace Treaty!",
-                    NotificationCategory.Diplomacy, civInfo.civName, NotificationIcon.Diplomacy, otherCivName
+                    "[${civInfo.civName}] and [${otherCiv.civName}] have signed a Peace Treaty!",
+                    NotificationCategory.Diplomacy, civInfo.civName, NotificationIcon.Diplomacy, otherCiv.civName
             )
         }
     }
@@ -628,10 +629,15 @@ class DiplomacyManager() : IsPartOfGameInfoSerialization {
         flagsCountdown.remove(flag.name)
     }
 
-    fun addModifier(modifier: DiplomaticModifiers, amount: Float) {
+    fun addModifier(modifier: DiplomaticModifiers, amount: Float, limit: Float? = null) {
         val modifierString = modifier.name
         if (!hasModifier(modifier)) setModifier(modifier, 0f)
-        diplomaticModifiers[modifierString] = diplomaticModifiers[modifierString]!! + amount
+        var newValue = diplomaticModifiers[modifierString]!! + amount
+        if (limit != null) {
+            if (limit < 0) newValue = newValue.coerceAtLeast(limit)
+            else newValue = newValue.coerceAtMost(limit)
+        }
+        diplomaticModifiers[modifierString] = newValue
         if (diplomaticModifiers[modifierString] == 0f) diplomaticModifiers.remove(modifierString)
     }
 
@@ -661,11 +667,11 @@ class DiplomacyManager() : IsPartOfGameInfoSerialization {
         otherCivDiplomacy().setFlag(DiplomacyFlags.DeclarationOfFriendship, 30)
 
         for (thirdCiv in getCommonKnownCivsWithSpectators()) {
-            thirdCiv.addNotification("[${civInfo.civName}] and [$otherCivName] have signed the Declaration of Friendship!",
-                NotificationCategory.Diplomacy, civInfo.civName, NotificationIcon.Diplomacy, otherCivName)
+            thirdCiv.addNotification("[${civInfo.civName}] and [${otherCiv.civName}] have signed a Declaration of Friendship!",
+                NotificationCategory.Diplomacy, civInfo.civName, NotificationIcon.Diplomacy, otherCiv.civName)
+            if (thirdCiv.isSpectator()) continue
             thirdCiv.getDiplomacyManager(civInfo)!!.setFriendshipBasedModifier()
-            if (thirdCiv.isSpectator()) return
-            thirdCiv.getDiplomacyManager(civInfo)!!.setFriendshipBasedModifier()
+            thirdCiv.getDiplomacyManager(otherCiv)!!.setFriendshipBasedModifier()
         }
 
         // Ignore contitionals as triggerUnique will check again, and that would break
@@ -712,8 +718,8 @@ class DiplomacyManager() : IsPartOfGameInfoSerialization {
 
 
         for (thirdCiv in getCommonKnownCivsWithSpectators()) {
-            thirdCiv.addNotification("[${civInfo.civName}] and [$otherCivName] have signed a Defensive Pact!",
-                NotificationCategory.Diplomacy, civInfo.civName, NotificationIcon.Diplomacy, otherCivName)
+            thirdCiv.addNotification("[${civInfo.civName}] and [${otherCiv.civName}] have signed a Defensive Pact!",
+                NotificationCategory.Diplomacy, civInfo.civName, NotificationIcon.Diplomacy, otherCiv.civName)
             if (thirdCiv.isSpectator()) return
             thirdCiv.getDiplomacyManager(civInfo)!!.setDefensivePactBasedModifier()
         }
@@ -729,15 +735,18 @@ class DiplomacyManager() : IsPartOfGameInfoSerialization {
     internal fun setDefensivePactBasedModifier() {
         removeModifier(DiplomaticModifiers.SignedDefensivePactWithOurAllies)
         removeModifier(DiplomaticModifiers.SignedDefensivePactWithOurEnemies)
-        for (thirdCiv in getCommonKnownCivs()
-            .filter { it.getDiplomacyManager(civInfo)!!.hasFlag(DiplomacyFlags.DefensivePact) }) {
-            //Note: These modifiers are additive to the friendship modifiers
-            val relationshipLevel = otherCivDiplomacy().relationshipIgnoreAfraid()
-            val modifierType = when (relationshipLevel) {
+
+        val civsTheyHavePactWith = getCommonKnownCivs()
+            .filter { otherCiv.getDiplomacyManager(it)!!.hasFlag(DiplomacyFlags.DefensivePact) }
+
+        for (thirdCiv in civsTheyHavePactWith) {
+            // what do we (A) think about the other civ (B) having a defensive pact with the third civ (C)?
+            val ourRelationshipWithThirdCiv = civInfo.getDiplomacyManager(thirdCiv)!!.relationshipIgnoreAfraid()
+            val modifierType = when (ourRelationshipWithThirdCiv) {
                 RelationshipLevel.Unforgivable, RelationshipLevel.Enemy -> DiplomaticModifiers.SignedDefensivePactWithOurEnemies
                 else -> DiplomaticModifiers.SignedDefensivePactWithOurAllies
             }
-            val modifierValue = when (relationshipLevel) {
+            val modifierValue = when (ourRelationshipWithThirdCiv) {
                 RelationshipLevel.Unforgivable -> -15f
                 RelationshipLevel.Enemy -> -10f
                 RelationshipLevel.Friend -> 2f
@@ -802,7 +811,7 @@ class DiplomacyManager() : IsPartOfGameInfoSerialization {
             thirdCiv.addNotification(
                 "[${civInfo.civName}] has denounced [${otherCiv.civName}]!",
                 NotificationCategory.Diplomacy,
-                civInfo.civName, NotificationIcon.Diplomacy, otherCivName
+                civInfo.civName, NotificationIcon.Diplomacy, otherCiv.civName
             )
             
             if (thirdCiv.isSpectator())

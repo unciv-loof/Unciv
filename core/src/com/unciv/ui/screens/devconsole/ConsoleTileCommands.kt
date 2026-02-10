@@ -1,5 +1,4 @@
 package com.unciv.ui.screens.devconsole
-
 import com.unciv.Constants
 import com.unciv.logic.city.City
 import com.unciv.logic.civilization.LocationAction
@@ -90,7 +89,7 @@ internal class ConsoleTileCommands: ConsoleCommandNode {
         "setresource" to ConsoleAction("tile setresource <resourceName>") { console, params ->
             val selectedTile = console.getSelectedTile()
             val resource = params[0].find(console.gameInfo.ruleset.tileResources.values)
-            selectedTile.resource = resource.name
+            selectedTile.tileResource = resource
             selectedTile.setTerrainTransients()
             selectedTile.getCity()?.reassignPopulation()
             DevConsoleResponse.OK
@@ -98,7 +97,7 @@ internal class ConsoleTileCommands: ConsoleCommandNode {
 
         "removeresource" to ConsoleAction("tile removeresource") { console, _ ->
             val selectedTile = console.getSelectedTile()
-            selectedTile.resource = null
+            selectedTile.tileResource = null
             selectedTile.setTerrainTransients()
             selectedTile.getCity()?.reassignPopulation()
             DevConsoleResponse.OK
@@ -125,12 +124,20 @@ internal class ConsoleTileCommands: ConsoleCommandNode {
             if (locations.isEmpty()) DevConsoleResponse.hint("None found")
             else {
                 val notification = Notification("tile find ${filter.toStringAsPlaceholder()}: ${locations.size} matches", arrayOf(NotificationIcon.Spy),
-                    LocationAction(locations).asIterable(), NotificationCategory.General)
+                    locations.map { LocationAction(it) }, NotificationCategory.General)
                 console.screen.notificationsScroll.oneTimeNotification = notification
                 notification.execute(console.screen)
                 DevConsoleResponse.OK
             }
         },
+
+        "spawn-barbarian-encampment" to ConsoleAction("tile spawn-barbarian-encampment") { console, _ ->
+            val selectedTile = console.getSelectedTile()
+            console.gameInfo.barbarians.createNewCamp(selectedTile)
+
+            DevConsoleResponse.OK
+        },
+
     )
 
     private fun setBaseTerrain(tile: Tile, terrain: Terrain): DevConsoleResponse {

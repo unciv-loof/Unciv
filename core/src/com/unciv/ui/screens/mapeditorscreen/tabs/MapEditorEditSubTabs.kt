@@ -158,7 +158,7 @@ class MapEditorEditResourcesTab(
         val eraser = FormattedLine("Remove resource", icon = eraserIcon, size = 32, iconCrossed = true)
         add(eraser.render(0f).apply { onClick {
             editTab.setBrush("Remove resource", eraserIcon, pediaLink = "", isRemove = true) { tile ->
-                tile.resource = null
+                tile.tileResource = null
                 tile.resourceAmount = 0
             }
         } }).padBottom(0f).row()
@@ -169,7 +169,7 @@ class MapEditorEditResourcesTab(
         ) { resourceName ->
             val resource = ruleset.tileResources[resourceName]!!
             editTab.setBrush(resourceName, resource.makeLink()) {
-                if (it.resource == resourceName && resource.resourceType == ResourceType.Strategic)
+                if (it.tileResource == resource && resource.resourceType == ResourceType.Strategic)
                     it.resourceAmount = (it.resourceAmount + 1).coerceAtMost(42)
                 else
                     it.setTileResource(resource, rng = editTab.randomness.RNG)
@@ -368,8 +368,8 @@ class MapEditorEditRiversTab(
                     tile.hasBottomRightRiver = false
                     tile.hasBottomRiver = false
                     // User probably expects all six edges to be cleared
-                    val x = tile.position.x.toInt()
-                    val y = tile.position.y.toInt()
+                    val x = tile.position.x
+                    val y = tile.position.y
                     tile.tileMap.getIfTileExistsOrNull(x, y + 1)?.hasBottomLeftRiver = false
                     tile.tileMap.getIfTileExistsOrNull(x + 1, y)?.hasBottomRightRiver = false
                     tile.tileMap.getIfTileExistsOrNull(x + 1, y + 1)?.hasBottomRiver = false

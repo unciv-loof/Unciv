@@ -60,7 +60,7 @@ class StatTreeNode {
     fun clone() : StatTreeNode {
         val new = StatTreeNode()
         new.innerStats = this.innerStats?.clone()
-        new.children.putAll(this.children)
+        new.children.putAll(this.children.mapValues { it.value.clone() })
         return new
     }
 
@@ -349,7 +349,7 @@ class CityStats(val city: City) {
         val stats = Stats()
         val workedTiles = city.tilesInRange.asSequence()
             .filter {
-                city.location == it.position
+                city.location.toHexCoord() == it.position
                         || city.isWorked(it)
                         || it.owningCity == city && (it.getUnpillagedTileImprovement()
                     ?.hasUnique(UniqueType.TileProvidesYieldWithoutPopulation, it.stateThisTile) == true
@@ -639,14 +639,21 @@ class CityStats(val city: City) {
 
     @Readonly
     private fun calcFoodEaten(): Float {
-        var foodEaten = city.population.population.toFloat() * 2
         var foodEatenBySpecialists = 2f * city.population.getNumberOfSpecialists()
-
+        var foodEaten = city.population.population.toFloat() * 2 - foodEatenBySpecialists
+        
         for (unique in city.getMatchingUniques(UniqueType.FoodConsumptionBySpecialists))
             if (city.matchesFilter(unique.params[1]))
                 foodEatenBySpecialists *= unique.params[0].toPercent()
 
-        foodEaten -= 2f * city.population.getNumberOfSpecialists() - foodEatenBySpecialists
+        foodEaten += foodEatenBySpecialists
+        
+        for (unique in city.getMatchingUniques(UniqueType.FoodConsumptionByPopulation)) {
+            if (!city.matchesFilter(unique.params[2])) continue
+            val foodEatenByPopulationFilter = 2f * city.population.getPopulationFilterAmount(unique.params[1])
+            foodEaten -= foodEatenByPopulationFilter * (1f - unique.params[0].toPercent())
+        }
+        
         return foodEaten
     }
 
