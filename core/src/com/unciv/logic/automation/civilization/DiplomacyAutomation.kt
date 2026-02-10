@@ -22,8 +22,10 @@ import com.unciv.models.ruleset.unique.UniqueType
 import com.unciv.ui.screens.victoryscreen.RankingType
 import yairm210.purity.annotations.Readonly
 import kotlin.math.abs
+import kotlin.math.ceil
 import kotlin.math.pow
 import kotlin.math.roundToInt
+import kotlin.math.sqrt
 import kotlin.random.Random
 
 object DiplomacyAutomation {
@@ -507,9 +509,10 @@ object DiplomacyAutomation {
 
         // limit how many civs we can denounce similtaneously
         // TODO: replace this with logic to consider consequences of denouncing others
-        val maxActiveDenunciations = 5
-        if (civInfo.diplomacy.values.count { it.hasFlag(DiplomacyFlags.Denunciation) } >= maxActiveDenunciations)
-            return
+        // max = square root of number of alive known major civs, rounded up
+        val maxActiveDenunciations = ceil(sqrt(civInfo.getKnownCivs().filter { it.isMajorCiv() }.count().toFloat()))
+        
+        var activeDenunciations = civInfo.diplomacy.values.count { it.hasFlag(DiplomacyFlags.Denunciation) }
         
         civInfo.diplomacy.values.stream()
             // only denounce major civs
@@ -521,13 +524,17 @@ object DiplomacyAutomation {
                     && !it.hasFlag(DiplomacyFlags.DeclarationOfFriendship)
                     && !it.hasFlag(DiplomacyFlags.Denunciation)
             }.forEach {
+                if (activeDenunciations >= maxActiveDenunciations)
+                    return@forEach
                 val denounceWillingnessModifier =
                     1f // TODO: apply denounceWillingness personality trait
                 // compare our current opinion with the smoothed opinion
                 val opinionChange = it.opinionOfOtherCiv() - it.smoothedOpinionOfOtherCiv
                 // denounce if opinion dropped too quickly
-                if (opinionChange <= requiredOpinionChange(it, denounceWillingnessModifier))
+                if (opinionChange <= requiredOpinionChange(it, denounceWillingnessModifier)) {
                     it.denounce()
+                    activeDenunciations++
+                }
             }
     }
 }
