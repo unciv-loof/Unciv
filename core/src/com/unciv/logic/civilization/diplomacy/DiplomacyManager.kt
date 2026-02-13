@@ -235,7 +235,7 @@ class DiplomacyManager() : IsPartOfGameInfoSerialization {
     /**
      * Smoothing formula = (newValue + oldAverage * (period - 1)) / period
      */
-    internal fun saveOpinionOfOtherCiv() {
+    internal fun saveSmoothedOpinionOfOtherCiv() {
         smoothedOpinionOfOtherCiv = cachedSmoothedOpinionOfOtherCiv
         cachedSmoothedOpinionOfOtherCiv = (opinionOfOtherCiv() + smoothedOpinionOfOtherCiv * (smoothedOpinionEmaPeriod() - 1)) / smoothedOpinionEmaPeriod()
     }
