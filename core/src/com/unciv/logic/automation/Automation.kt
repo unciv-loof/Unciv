@@ -474,10 +474,10 @@ object Automation {
             val adjacentDistance = city.getCenterTile().aerialDistanceTo(adjacentTile)
             val adjacentResource = adjacentTile.tileResource
             if (city.civ.canSeeResource(adjacentResource) &&
-                (adjacentDistance < city.getWorkRange() || adjacentResource.resourceType != ResourceType.Bonus)
+                (adjacentDistance <= city.getWorkRange() || adjacentResource.resourceType != ResourceType.Bonus)
             ) score -= 1
             if (adjacentTile.naturalWonder != null) {
-                if (adjacentDistance < city.getWorkRange()) adjacentNaturalWonder = true
+                if (adjacentDistance <= city.getWorkRange()) adjacentNaturalWonder = true
                 score -= 1
             }
         }
