@@ -470,7 +470,7 @@ object Automation {
         // Check if we get access to better tiles from this tile
         var adjacentNaturalWonder = false
 
-        for (adjacentTile in tile.neighbors.filter { it.getOwner() == null }) {
+        for (adjacentTile in tile.neighbors.filter { city.civ.hasExplored(it) && it.getOwner() == null }) {
             val adjacentDistance = city.getCenterTile().aerialDistanceTo(adjacentTile)
             val adjacentResource = adjacentTile.tileResource
             if (city.civ.canSeeResource(adjacentResource) &&
