@@ -477,6 +477,7 @@ object Automation {
                 isContested = true
                 continue
             }
+            // the neighbor tile is not owned by anyone
             val adjacentDistance = city.getCenterTile().aerialDistanceTo(adjacentTile)
             val adjacentResource = adjacentTile.tileResource
             if (city.civ.canSeeResource(adjacentResource) &&
