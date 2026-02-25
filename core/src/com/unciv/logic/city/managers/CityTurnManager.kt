@@ -52,14 +52,14 @@ class CityTurnManager(val city: City) {
 
         // Seed resource demand countdown
         if (city.demandedResource == "" && !city.hasFlag(CityFlags.ResourceDemand)) {
-            wltkDemandResourceCooldown(true)
+            setWltkResourceDemandCooldown(true)
         }
     }
     
-    private fun wltkDemandResourceCooldown(isFirstTime: Boolean) {
+    private fun setWltkResourceDemandCooldown(isNewCity: Boolean) {
         // Demand a new resource in ~20 turns on Standard speed
         var duration = 15 + Random.Default.nextInt(10)
-        if (isFirstTime && city.isCapital())
+        if (isNewCity && city.isCapital())
             duration += 10
         duration = (duration * city.civ.gameInfo.speed.modifier).roundToInt()
         city.setFlag(
@@ -128,7 +128,7 @@ class CityTurnManager(val city: City) {
         val chosenResource = missingResources.randomOrNull()
         
         city.demandedResource = chosenResource?.name ?: "" // mods may have no resources as candidates even
-        wltkDemandResourceCooldown(false)
+        setWltkResourceDemandCooldown(false)
         
         if (city.demandedResource != "") // Failed to get a valid resource, try again some time later
             city.civ.addNotification("[${city.name}] demands [${city.demandedResource}]!",
