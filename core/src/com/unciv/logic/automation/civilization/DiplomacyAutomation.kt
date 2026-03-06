@@ -24,8 +24,8 @@ import com.unciv.utils.Log
 import yairm210.purity.annotations.Readonly
 import kotlin.math.abs
 import kotlin.math.ceil
+import kotlin.math.max
 import kotlin.math.pow
-import kotlin.math.roundToInt
 import kotlin.math.sqrt
 import kotlin.random.Random
 
@@ -469,7 +469,7 @@ object DiplomacyAutomation {
     }
 
     /**
-     * If opinion of the other civ drops by this amount or more
+     * Denounce if opinion of the other civ drops quickly by this amount or more (+- other factors)
      */
     const val DENOUNCE_REQUIRED_OPINION_CHANGE_INITIAL = -65f
     const val DENOUNCE_REQUIRED_OPINION_CHANGE_BASE = 1.005f
@@ -477,28 +477,9 @@ object DiplomacyAutomation {
     /**
      * Check if [civInfo] has become frustrated with other civs. If so, denounce those civs.
      */
-    internal fun denounce(
+    internal fun tryDenounce(
         civInfo: Civilization
     ) {
-        /**
-         * This is not an official formula - modify or replace as needed.
-         *
-         * Whether to denounce is determined by how rapidly opinion has declined, the current relationship level, and personality traits.
-         *
-         * With the current formula, the AI will denounce if opinion drops rapidly from:
-         * ```
-         * 135 to 50
-         * 65 to 0
-         * 0 to -50
-         * -60 to -100
-         * ```
-         * Adjust with [DiplomacyManager.EMA_PERIOD], [DENOUNCE_REQUIRED_OPINION_CHANGE_INITIAL] and [DENOUNCE_REQUIRED_OPINION_CHANGE_BASE]
-         */
-        fun requiredOpinionChange(
-            diplomacyManager: DiplomacyManager,
-            denounceWillingnessModifier: Float = 1f
-        ): Float = DENOUNCE_REQUIRED_OPINION_CHANGE_INITIAL * denounceWillingnessModifier * DENOUNCE_REQUIRED_OPINION_CHANGE_BASE.pow(diplomacyManager.opinionOfOtherCiv())
-
         // debugging: records every civ's opinion of every other civ
         Log.debug(civInfo.civName)
         fun debug(diplomacy: DiplomacyManager) {
@@ -508,36 +489,85 @@ object DiplomacyAutomation {
                 { diplomacy.opinionOfOtherCiv() },
                 { diplomacy.smoothedOpinionOfOtherCiv },
                 { diplomacy.smoothedOpinionDelta() },
-                { requiredOpinionChange(diplomacy) }
+                { requiredOpinionChangeToDenounce(diplomacy) }
             )
         }
 
+        for (diplomacy in civInfo.diplomacy.values.asSequence()) {
+            if (diplomacy.otherCiv.isMajorCiv())
+                debug(diplomacy)
+            // denounce if opinion dropped too quickly
+            if (wantsToDenounce(civInfo, diplomacy.otherCiv))
+                diplomacy.denounce()
+        }
+    }
+
+    /**
+     * @param urgedToDenounceBy A third party civ requested that we issue a denunciation.
+     * 
+     * This is not an official formula - modify or replace as needed.
+     *
+     * Whether to denounce is determined by how rapidly opinion has declined, the current relationship level, and personality traits.
+     *
+     * With the current formula, the AI will denounce if opinion drops rapidly from:
+     * ```
+     * 135 to 50
+     * 65 to 0
+     * 0 to -50
+     * -60 to -100
+     * ```
+     * Adjust with [DiplomacyManager.EMA_PERIOD], [DENOUNCE_REQUIRED_OPINION_CHANGE_INITIAL] and [DENOUNCE_REQUIRED_OPINION_CHANGE_BASE]
+     */
+    @Readonly
+    private fun requiredOpinionChangeToDenounce(
+        diplomacy: DiplomacyManager,
+        urgedToDenounceBy: Civilization? = null
+    ): Float {
+        var requiredOpinionChange = DENOUNCE_REQUIRED_OPINION_CHANGE_INITIAL
+        
+        // if a third party civ wants us to do it
+        if (urgedToDenounceBy != null) {
+            // we look more favorably upon the request if they are a friend
+            val opinionOfUrgingCiv = diplomacy.civInfo.getDiplomacyManager(urgedToDenounceBy)!!.opinionOfOtherCiv()
+            requiredOpinionChange *=
+                if (opinionOfUrgingCiv < 0f) 5f
+                else max(5f, sqrt(opinionOfUrgingCiv))
+        }
+        
+        // TODO personality modifier
+        // requiredOpinionChange *= diplomacy.civInfo.getPersonality().denounceWillingness
+
+        // consider current relationship with the target civ
+        requiredOpinionChange *= DENOUNCE_REQUIRED_OPINION_CHANGE_BASE.pow(diplomacy.opinionOfOtherCiv())
+        
+        return requiredOpinionChange
+    }
+
+    /**
+     * @param urgedToDenounceBy Third party civ who requested it
+     */
+    @Readonly
+    internal fun wantsToDenounce(civInfo: Civilization, otherCiv: Civilization, urgedToDenounceBy: Civilization? = null): Boolean {
         // limit how many civs we can denounce similtaneously
         // TODO: replace hard cap with logic where number of active denunciations affects the opinion change required to denounce more civs
         // max = square root of number of alive known major civs, rounded up
         val maxActiveDenunciations = ceil(sqrt(civInfo.getKnownCivs().filter { it.isMajorCiv() }.count().toFloat()))
+        val activeDenunciations = civInfo.diplomacy.values.count { it.hasFlag(DiplomacyFlags.Denunciation) }
+        if (activeDenunciations >= maxActiveDenunciations)
+            return false
+        
+        val diplomacy = civInfo.getDiplomacyManager(otherCiv)!!
+        if (! otherCiv.isMajorCiv()
+            || diplomacy.diplomaticStatus == DiplomaticStatus.War
+            || diplomacy.hasFlag(DiplomacyFlags.DeclarationOfFriendship)
+            || diplomacy.hasFlag(DiplomacyFlags.Denunciation))
+            return false
 
-        var activeDenunciations = civInfo.diplomacy.values.count { it.hasFlag(DiplomacyFlags.Denunciation) }
+        // TODO: consider global politics, i.e. if it would harm our relationship with many other civs
+        // compare our current opinion with the smoothed opinion
+        val opinionChange = diplomacy.smoothedOpinionDelta()
         
-        val ourRelationships = civInfo.diplomacy.values.asSequence()
-            .filter { it.otherCiv.isMajorCiv() }
-            .onEach { debug(it) }
-            .filter { it.diplomaticStatus != DiplomaticStatus.War
-                    && !it.hasFlag(DiplomacyFlags.DeclarationOfFriendship)
-                    && !it.hasFlag(DiplomacyFlags.Denunciation) }
-        
-        for (relationship in ourRelationships) {
-            if (activeDenunciations >= maxActiveDenunciations)
-                break
-            // TODO: consider consequences of denouncing others
-            // compare our current opinion with the smoothed opinion
-            val opinionChange = relationship.smoothedOpinionDelta()
-            // denounce if opinion dropped too quickly
-            // TODO: apply denounceWillingness personality trait
-            if (opinionChange <= requiredOpinionChange(relationship, 1f)) {
-                relationship.denounce()
-                activeDenunciations++
-            }
-        }
+        // <= because required opinion change is a negative value
+        return opinionChange <= requiredOpinionChangeToDenounce(diplomacy)
     }
 }

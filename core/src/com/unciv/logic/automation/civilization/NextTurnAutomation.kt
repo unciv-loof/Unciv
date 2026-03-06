@@ -56,7 +56,7 @@ object NextTurnAutomation {
                 ReligionAutomation.spendFaithOnReligion(civInfo)
             }
 
-            DiplomacyAutomation.denounce(civInfo)
+            DiplomacyAutomation.tryDenounce(civInfo)
             DiplomacyAutomation.offerToEstablishEmbassy(civInfo)
             DiplomacyAutomation.offerOpenBorders(civInfo)
             DiplomacyAutomation.offerResearchAgreement(civInfo)
