@@ -247,7 +247,7 @@ class AlertPopup(
 
     private fun addDeclarationOfFriendship(): Boolean {
         val otherciv = getCiv(popupAlert.value)
-        if (otherciv.isDefeated()) return false
+        if (otherciv.isDefeated() || otherciv.getDiplomacyManager(viewingCiv)!!.diplomaticStatus == DiplomaticStatus.War) return false
         val playerDiploManager = viewingCiv.getDiplomacyManager(otherciv)!!
         addLeaderName(otherciv)
         addTopicHeader("DECLARATION OF FRIENDSHIP", LIGHTER_GREEN_COLOR)
