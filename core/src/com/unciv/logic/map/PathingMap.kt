@@ -11,6 +11,7 @@ import com.unciv.logic.map.RouteNode.Companion.MAX_MOVE_THIS_TURN
 import com.unciv.logic.map.mapunit.MapUnit
 import com.unciv.logic.map.mapunit.movement.MovementCost
 import com.unciv.logic.map.mapunit.movement.PathsToTilesWithinTurn
+import com.unciv.logic.map.mapunit.movement.UnitMovement.CannotMoveToReason
 import com.unciv.logic.map.mapunit.movement.UnitMovement.ParentTileAndTotalMovement
 import com.unciv.logic.map.tile.Tile
 import com.unciv.utils.Log
@@ -325,12 +326,16 @@ class PathingMap(
                     fpmFromMovement(selfFullMove.coerceAtMost(if (escort != null) otherUntilFullMove else MAX_VALID_TURNS)),
                     )
             }
+            val moveThroughPredicate = MoveThroughPredicate {
+                val cannotMoveThroughReason = unit.movement.cannotPassThroughReason(it, includeEscortUnit)
+                cannotMoveThroughReason == null || cannotMoveThroughReason == CannotMoveToReason.TileIsNotEmpty
+            }
             return PathingMap(
                 unit.currentTile.tileMap,
                 unit,
                 name,
                 getCurrentCacheKey,
-                { unit.movement.canPassThrough(it)  },
+                moveThroughPredicate,
                 { unit.getDamageFromTerrain(it) },
                 { from, to -> fpmFromMovement(MovementCost.getMovementCostBetweenAdjacentTilesEscort(unit, from, to, considerZoneOfControl, includeEscortUnit)) },
                 { fpmFromMovement(it.getConnectionStatus(unit.civ).movement) },
