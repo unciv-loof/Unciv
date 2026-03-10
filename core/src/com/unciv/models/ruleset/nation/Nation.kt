@@ -54,6 +54,11 @@ class Nation : RulesetObject() {
     var defeated = ""
     /** Shown for MajorCivDiplomacyTable.getDenounceButton */
     var denounced = ""
+
+    /** Shown in the popup when a civ denounces another civ. */
+    var denouncing = ""
+    /** Shown in the popup when an AI denounces ane of its enemies. */
+    var hateDenouncing = ""
     /** Shown for Declaration of Friendship */
     var declaringFriendship = ""
     /** Shown for AlertType.FirstContact */

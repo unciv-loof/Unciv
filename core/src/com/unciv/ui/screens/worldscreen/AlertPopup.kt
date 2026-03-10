@@ -67,6 +67,7 @@ class AlertPopup(
         private const val SEPARATOR_LINE_TO_TEXT_PADDING = 25f
         private val LIGHTER_RED_COLOR = Color(1f, 1/3f, 1/3f, 1f)
         private val LIGHTER_GREEN_COLOR = Color(1/3f, 1f, 1/3f, 1f)
+        private val LIGHTER_ORANGE_COLOR = Color(1f, 2/5f, 0f, 1f)
     }
 
     //region convenience getters
@@ -102,6 +103,7 @@ class AlertPopup(
             AlertType.WarDeclaration -> shouldOpen = addWarDeclaration()
             AlertType.BorderConflict -> shouldOpen = addBorderConflict()
             AlertType.TilesStolen -> shouldOpen = addTilesStolen()
+            AlertType.Denounced -> addDenouncement()
             
             // demands
             AlertType.DemandToStopSettlingCitiesNear -> shouldOpen = addDemand(Demand.DoNotSettleNearUs)
@@ -266,6 +268,28 @@ class AlertPopup(
         return true
     }
 
+    private fun addDenouncement() {
+        val denouncer = getCiv(popupAlert.value)
+        addLeaderName(denouncer)
+        addTopicHeader("DENOUNCEMENT", LIGHTER_ORANGE_COLOR)
+        // normal message unless we are enemies
+        val leaderMessage = if (denouncer.getDiplomacyManager(viewingCiv)!!.isRelationshipLevelGE(RelationshipLevel.Competitor)) {
+            music.playVoice("${denouncer.nation.name}.denouncing")
+            denouncer.nation.denouncing.ifEmpty { "You have violated our bond of trust. This is intolerable!" }
+        } else {
+            music.playVoice("${denouncer.nation.name}.hateDenouncing")
+            denouncer.nation.hateDenouncing.ifEmpty { "You are a scourge upon this earth. I denounce you!" }
+        }
+        addGoodSizedLabel(leaderMessage).row()
+        val diplomacy = viewingCiv.getDiplomacyManager(denouncer)!!
+        if (diplomacy.canDeclareWar()) {
+            addCloseButton("THIS MEANS WAR! (Declare war)") {
+                diplomacy.declareWar()
+            }.row()
+        }
+        addCloseButton("Very well.", KeyboardBinding.Cancel).row()
+    }
+    
     private fun addDefeated() {
         val civInfo = getCiv(popupAlert.value)
         addLeaderName(civInfo)

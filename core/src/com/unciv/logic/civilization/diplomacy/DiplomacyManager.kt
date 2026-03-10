@@ -3,9 +3,11 @@ package com.unciv.logic.civilization.diplomacy
 import com.badlogic.gdx.graphics.Color
 import com.unciv.Constants
 import com.unciv.logic.IsPartOfGameInfoSerialization
+import com.unciv.logic.civilization.AlertType
 import com.unciv.logic.civilization.Civilization
 import com.unciv.logic.civilization.NotificationCategory
 import com.unciv.logic.civilization.NotificationIcon
+import com.unciv.logic.civilization.PopupAlert
 import com.unciv.logic.trade.Trade
 import com.unciv.logic.trade.TradeEvaluation
 import com.unciv.logic.trade.TradeLogic
@@ -801,7 +803,11 @@ class DiplomacyManager() : IsPartOfGameInfoSerialization {
         // before adjusting with game speed - consider possible side effects of this
         setFlag(DiplomacyFlags.Denunciation, 30)
         
-        // TODO: make denouncement more impactful with a popup
+        // the denounced civ will get a popup
+        otherCiv.popupAlerts.add(
+            PopupAlert(AlertType.Denounced, civInfo.civID)
+        )
+        // ...and a notification as a reminder for the rest of the turn
         otherCiv.addNotification(
             "[${civInfo.civName}] has denounced us!",
             NotificationCategory.Diplomacy,
