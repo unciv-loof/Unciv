@@ -283,7 +283,7 @@ class TurnManager(val civInfo: Civilization) {
         if (! civInfo.isBarbarian) {
             // disband military units until there are none left OR the gold values are normal
             while (civInfo.gold <= -200 && nextTurnStats.gold.toInt() < 0) {
-                // prioritize units inside our territory, becuase disbanding them yields gold, and inexperienced units
+                // prioritize units inside our territory, because disbanding them yields gold, and inexperienced units
                 val priorities = compareByDescending<MapUnit> { it.currentTile.getOwner() == civInfo }
                     .thenBy { it.promotions.valueOfPromotionsAndXp() }
                 val unitToDisband = civInfo.units.getCivUnits()
